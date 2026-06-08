@@ -1,0 +1,10 @@
+/home/user/.gemini/antigravity/scratch/tee-chain/target/debug/deps/module_lattice-6431f8534adccec1.d: /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/lib.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/algebra.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/encoding.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/maybe_box.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/truncate.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/../README.md
+
+/home/user/.gemini/antigravity/scratch/tee-chain/target/debug/deps/libmodule_lattice-6431f8534adccec1.rmeta: /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/lib.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/algebra.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/encoding.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/maybe_box.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/truncate.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/../README.md
+
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/lib.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/algebra.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/encoding.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/maybe_box.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/truncate.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/module-lattice-0.2.3/src/../README.md:

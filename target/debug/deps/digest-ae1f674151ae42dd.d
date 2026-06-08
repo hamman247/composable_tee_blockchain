@@ -1,0 +1,12 @@
+/home/user/.gemini/antigravity/scratch/tee-chain/target/debug/deps/digest-ae1f674151ae42dd.d: /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/lib.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/fixed.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/variable.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/xof.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/digest.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/xof_fixed.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/../README.md
+
+/home/user/.gemini/antigravity/scratch/tee-chain/target/debug/deps/libdigest-ae1f674151ae42dd.rmeta: /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/lib.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/fixed.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/variable.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/xof.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/digest.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/xof_fixed.rs /home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/../README.md
+
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/lib.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/fixed.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/variable.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/buffer_macros/xof.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/digest.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/xof_fixed.rs:
+/home/user/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.11.3/src/../README.md:

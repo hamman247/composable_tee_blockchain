@@ -1,0 +1,10 @@
+FROM rust:1.79-slim as builder
+WORKDIR /app
+COPY . .
+RUN apt-get update && apt-get install -y cmake gcc g++ pkg-config && \
+    cargo build --release -p root-trust-tee
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/root-trust-tee /usr/local/bin/
+ENTRYPOINT ["root-trust-tee"]
+CMD ["/data"]

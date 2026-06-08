@@ -1,0 +1,97 @@
+version: "3.8"
+
+services:
+  # Root Trust TEE - initializes and certifies all TEEs
+  root-trust:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.root-trust
+    volumes:
+      - root-trust-data:/data
+    environment:
+      - DATA_DIR=/data
+    networks:
+      - tee-chain
+
+  # TEE-Chain Node 1
+  node1:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.node
+    ports:
+      - "8545:8545"
+      - "30303:30303"
+    volumes:
+      - node1-data:/data
+      - root-trust-data:/root-trust:ro
+    environment:
+      - TEE_MODE=simulator
+      - RPC_ADDR=0.0.0.0:8545
+      - P2P_ADDR=0.0.0.0:30303
+      - DATA_DIR=/data
+      - GENESIS_PATH=/data/genesis.json
+    depends_on:
+      - root-trust
+    networks:
+      - tee-chain
+
+  # TEE-Chain Node 2
+  node2:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.node
+    ports:
+      - "8546:8545"
+      - "30304:30303"
+    volumes:
+      - node2-data:/data
+      - root-trust-data:/root-trust:ro
+    environment:
+      - TEE_MODE=simulator
+      - RPC_ADDR=0.0.0.0:8545
+      - P2P_ADDR=0.0.0.0:30303
+      - DATA_DIR=/data
+      - GENESIS_PATH=/data/genesis.json
+    depends_on:
+      - root-trust
+    networks:
+      - tee-chain
+
+  # TEE-1 Block Coordinator
+  tee1-coordinator:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.tee1
+    volumes:
+      - root-trust-data:/root-trust:ro
+    environment:
+      - SEALED_KEYS_PATH=/root-trust/tee1-block-coordinator_sealed.json
+    depends_on:
+      - root-trust
+      - node1
+    networks:
+      - tee-chain
+
+  # TEE-2 AI Training
+  tee2-training:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.tee2
+    volumes:
+      - root-trust-data:/root-trust:ro
+    environment:
+      - SEALED_KEYS_PATH=/root-trust/tee2-ai-training_sealed.json
+    depends_on:
+      - root-trust
+      - node1
+    networks:
+      - tee-chain
+
+volumes:
+  root-trust-data:
+  node1-data:
+  node2-data:
+
+networks:
+  tee-chain:
+    driver: bridge

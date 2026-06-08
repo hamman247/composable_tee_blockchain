@@ -1,0 +1,71 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tee-types",
+    "crates/tee-crypto",
+    "crates/tee-attestation",
+    "crates/tee-consensus",
+    "crates/tee-node",
+    "tee-templates/root-trust",
+    "tee-templates/tee1-block-coordinator",
+    "tee-templates/tee2-ai-training",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.79"
+
+[workspace.dependencies]
+# Internal crates
+tee-types = { path = "crates/tee-types" }
+tee-crypto = { path = "crates/tee-crypto" }
+tee-attestation = { path = "crates/tee-attestation" }
+tee-consensus = { path = "crates/tee-consensus" }
+
+# PQC Cryptography
+pqcrypto-dilithium = "0.5"
+pqcrypto-kyber = "0.8"
+pqcrypto-traits = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Ethereum / EVM
+alloy-primitives = { version = "0.8", features = ["rand", "serde"] }
+alloy-rlp = { version = "0.3", features = ["derive"] }
+alloy-sol-types = "0.8"
+alloy-consensus = "0.6"
+alloy-rpc-types = "0.6"
+alloy-genesis = "0.6"
+
+# Crypto fundamentals
+sha3 = "0.10"
+rand = "0.8"
+hex = "0.4"
+zeroize = { version = "1", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Networking
+jsonrpsee = { version = "0.24", features = ["server", "client", "macros"] }
+tonic = "0.12"
+prost = "0.13"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Storage
+rocksdb = "0.22"

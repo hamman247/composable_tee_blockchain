@@ -1,0 +1,23 @@
+[package]
+name = "tee2-ai-training"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "tee2-ai-training"
+path = "src/main.rs"
+
+[dependencies]
+tee-types = { path = "../../crates/tee-types" }
+tee-crypto = { path = "../../crates/tee-crypto" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha3 = "0.10"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+alloy-primitives = { version = "0.8", features = ["rand"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+bincode = "1"
+rand = "0.8"

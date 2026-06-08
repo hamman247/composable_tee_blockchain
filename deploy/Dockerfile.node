@@ -1,0 +1,10 @@
+FROM rust:1.79-slim as builder
+WORKDIR /app
+COPY . .
+RUN apt-get update && apt-get install -y cmake gcc g++ pkg-config && \
+    cargo build --release -p tee-node
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/tee-node /usr/local/bin/
+ENTRYPOINT ["tee-node"]
+CMD ["--tee-mode", "simulator", "--rpc-addr", "0.0.0.0:8545"]

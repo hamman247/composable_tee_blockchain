@@ -1,0 +1,9 @@
+FROM rust:1.79-slim as builder
+WORKDIR /app
+COPY . .
+RUN apt-get update && apt-get install -y cmake gcc g++ pkg-config && \
+    cargo build --release -p tee2-ai-training
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/tee2-ai-training /usr/local/bin/
+ENTRYPOINT ["tee2-ai-training"]
