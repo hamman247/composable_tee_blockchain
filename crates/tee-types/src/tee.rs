@@ -32,6 +32,8 @@ pub enum TeeRole {
     BlockCoordinator,
     /// AI Training and Inference (TEE-2).
     AiTraining,
+    /// Ollama Inference Service (TEE-3) — signature-gated model serving.
+    OllamaInference,
     /// User-submitted TEE job.
     UserJob,
 }
