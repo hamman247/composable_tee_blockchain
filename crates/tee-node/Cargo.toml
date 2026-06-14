@@ -7,6 +7,10 @@ edition.workspace = true
 name = "tee-node"
 path = "src/main.rs"
 
+[[bin]]
+name = "integration-test"
+path = "src/integration_test.rs"
+
 [dependencies]
 tee-types = { workspace = true }
 tee-crypto = { workspace = true }

@@ -38,8 +38,23 @@ async fn main() -> Result<()> {
         "Node configuration loaded"
     );
 
-    // Load genesis and initialize state
-    let genesis = genesis::load_genesis(&config.genesis_path)?;
+    // Load genesis — auto-generate if file doesn't exist
+    let genesis = if std::path::Path::new(&config.genesis_path).exists() {
+        genesis::load_genesis(&config.genesis_path)?
+    } else {
+        tracing::warn!(
+            path = %config.genesis_path,
+            "Genesis file not found, generating default genesis for simulator mode"
+        );
+        let g = genesis::generate_default_genesis()?;
+        let json = serde_json::to_string_pretty(&g)?;
+        if let Some(parent) = std::path::Path::new(&config.genesis_path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&config.genesis_path, &json)?;
+        tracing::info!(path = %config.genesis_path, "Genesis file written");
+        g
+    };
     tracing::info!(
         num_genesis_tees = genesis.genesis_tees.len(),
         "Genesis configuration loaded"
