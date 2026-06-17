@@ -10,6 +10,7 @@ contract StakingToken {
 
     uint256 public totalSupply;
     uint256 public totalStaked;
+    address public owner;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => uint256) public stakedOf;
@@ -19,8 +20,15 @@ contract StakingToken {
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "StakingToken: caller is not the owner");
+        _;
+    }
 
     constructor(uint256 _initialSupply) {
+        owner = msg.sender;
         totalSupply = _initialSupply;
         balanceOf[msg.sender] = _initialSupply;
         emit Transfer(address(0), msg.sender, _initialSupply);
@@ -73,11 +81,17 @@ contract StakingToken {
         return true;
     }
 
-    /// @dev Mint tokens (only callable by system/genesis)
-    function mint(address to, uint256 amount) external {
-        // In production, this would be restricted to system contracts
+    /// @dev Mint tokens (only callable by contract owner — should be governance)
+    function mint(address to, uint256 amount) external onlyOwner {
         totalSupply += amount;
         balanceOf[to] += amount;
         emit Transfer(address(0), to, amount);
+    }
+
+    /// @dev Transfer ownership to a new address (e.g., governance contract)
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "StakingToken: zero address");
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
     }
 }

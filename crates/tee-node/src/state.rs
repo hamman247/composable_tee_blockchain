@@ -72,31 +72,31 @@ impl NodeState {
         })
     }
 
-    pub fn block_number(&self) -> u64 { self.inner.read().unwrap().block_number }
-    pub fn block_hash(&self) -> B256 { self.inner.read().unwrap().block_hash }
-    pub fn chain_id(&self) -> u64 { self.inner.read().unwrap().chain_id }
+    pub fn block_number(&self) -> u64 { self.inner.read().unwrap_or_else(|e| e.into_inner()).block_number }
+    pub fn block_hash(&self) -> B256 { self.inner.read().unwrap_or_else(|e| e.into_inner()).block_hash }
+    pub fn chain_id(&self) -> u64 { self.inner.read().unwrap_or_else(|e| e.into_inner()).chain_id }
 
     pub fn get_balance(&self, addr: &Address) -> U256 {
-        self.inner.read().unwrap().balances.get(addr).copied().unwrap_or(U256::ZERO)
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).balances.get(addr).copied().unwrap_or(U256::ZERO)
     }
     pub fn get_nonce(&self, addr: &Address) -> u64 {
-        self.inner.read().unwrap().nonces.get(addr).copied().unwrap_or(0)
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).nonces.get(addr).copied().unwrap_or(0)
     }
     pub fn pending_txn_count(&self) -> usize {
-        self.inner.read().unwrap().pending_txns.len()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).pending_txns.len()
     }
     pub fn add_pending_txn(&self, txn: PendingTransaction) -> Result<B256> {
         let hash = txn.hash;
-        self.inner.write().unwrap().pending_txns.push(txn);
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).pending_txns.push(txn);
         Ok(hash)
     }
 
     pub fn consensus_engine(&self) -> std::sync::RwLockReadGuard<'_, NodeStateInner> {
-        self.inner.read().unwrap()
+        self.inner.read().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn process_block(&self, src: &SignedRoundComplete) -> Result<u64> {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         inner.block_number += 1;
         use sha3::Digest;
         let mut h = sha3::Sha3_256::new();

@@ -6,11 +6,18 @@ import "./TEERegistry.sol";
 /// @title BlockRewards - Calculates and distributes block rewards per TEE constraints
 contract BlockRewards {
     TEERegistry public teeRegistry;
+    address public systemCaller;
 
     event RewardsDistributed(bytes32 indexed teeId, address operator, uint256 amount, uint256 blockNumber);
 
-    constructor(address _registry) {
+    modifier onlySystem() {
+        require(msg.sender == systemCaller, "BlockRewards: unauthorized caller");
+        _;
+    }
+
+    constructor(address _registry, address _systemCaller) {
         teeRegistry = TEERegistry(_registry);
+        systemCaller = _systemCaller;
     }
 
     /// @notice Distribute block rewards (called during block finalization)
@@ -18,7 +25,7 @@ contract BlockRewards {
         bytes32 teeId,
         address operator,
         uint256 amount
-    ) external payable {
+    ) external payable onlySystem {
         require(teeRegistry.isMiningEligible(teeId), "TEE not mining eligible");
         (, , , , , , , , , uint256 maxReward, ,) = teeRegistry.tees(teeId);
         require(amount <= maxReward, "Exceeds max reward");
@@ -38,7 +45,7 @@ contract BlockRewards {
         bytes32 teeId,
         address[] calldata operators,
         uint256[] calldata amounts
-    ) external payable {
+    ) external payable onlySystem {
         require(operators.length == amounts.length, "Length mismatch");
         require(teeRegistry.isMiningEligible(teeId), "TEE not mining eligible");
 

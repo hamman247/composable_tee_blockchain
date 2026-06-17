@@ -62,7 +62,9 @@ contract DAOGovernance {
     TEERegistry public teeRegistry;
     Treasury public treasury;
 
-    uint256 public constant VOTING_PERIOD = 7 days;
+    /// @dev Voting period in blocks (~7 days at 2s/block). Using block.number
+    ///      instead of block.timestamp to prevent miner timestamp manipulation.
+    uint256 public constant VOTING_PERIOD_BLOCKS = 302400;
     uint256 public constant QUORUM_BPS = 1000;           // 10% for normal votes
     uint256 public constant EMERGENCY_QUORUM_BPS = 200;   // 2% for initiating freeze
     uint256 public constant PROPOSAL_COLLATERAL = 1000 ether;
@@ -135,7 +137,7 @@ contract DAOGovernance {
         p.targetTeeId = targetTeeId;
         p.callData = callData;
         p.collateral = collateral;
-        p.deadline = block.timestamp + VOTING_PERIOD;
+        p.deadline = block.number + VOTING_PERIOD_BLOCKS;
         p.status = ProposalStatus.Active;
         p.maxRewardPerBlock = maxRewardPerBlock;
         p.miningEligible = miningEligible;
@@ -149,7 +151,7 @@ contract DAOGovernance {
     function vote(uint256 proposalId, bool support) external {
         Proposal storage p = proposals[proposalId];
         require(p.status == ProposalStatus.Active, "Not active");
-        require(block.timestamp < p.deadline, "Voting ended");
+        require(block.number < p.deadline, "Voting ended");
         require(!hasVoted[proposalId][msg.sender], "Already voted");
 
         uint256 weight = stakingToken.stakedOf(msg.sender);
@@ -168,7 +170,7 @@ contract DAOGovernance {
     function execute(uint256 proposalId) external {
         Proposal storage p = proposals[proposalId];
         require(p.status == ProposalStatus.Active, "Not active");
-        require(block.timestamp >= p.deadline, "Voting not ended");
+        require(block.number >= p.deadline, "Voting not ended");
 
         uint256 totalVotes = p.votesFor + p.votesAgainst;
         uint256 quorum = (stakingToken.totalStaked() * QUORUM_BPS) / 10000;
@@ -236,7 +238,7 @@ contract DAOGovernance {
         p.proposer = msg.sender;
         p.targetTeeId = teeId;
         p.collateral = EMERGENCY_COLLATERAL;
-        p.deadline = block.timestamp + VOTING_PERIOD;
+        p.deadline = block.number + VOTING_PERIOD_BLOCKS;
         p.status = ProposalStatus.Active;
         p.isEmergencyRevocation = true;
         p.preFreezeMaxReward = currentMaxReward;
