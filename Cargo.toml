@@ -10,6 +10,7 @@ members = [
     "tee-templates/tee1-block-coordinator",
     "tee-templates/tee2-ai-training",
     "tee-templates/tee3-ollama-inference",
+    "tee-templates/tee4-eth-validator",
 ]
 
 [workspace.package]

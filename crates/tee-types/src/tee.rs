@@ -34,6 +34,8 @@ pub enum TeeRole {
     AiTraining,
     /// Ollama Inference Service (TEE-3) — signature-gated model serving.
     OllamaInference,
+    /// Ethereum Mainnet Validator (TEE-4) — liquid staking via TEE.
+    EthValidator,
     /// User-submitted TEE job.
     UserJob,
 }

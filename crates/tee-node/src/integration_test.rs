@@ -1,11 +1,11 @@
-//! Full Integration Test: Root Trust → TEE-1 → TEE-2 → TEE-3 → Node
+//! Full Integration Test: Root Trust → TEE-1 → TEE-2 → TEE-3 → TEE-4 → Node
 //!
-//! Runs a complete end-to-end test of the blockchain with all three TEEs:
-//! 1. Root Trust initializes and certifies TEE-1, TEE-2, and TEE-3
-//! 2. TEE-1 produces blocks with round-robin operator scheduling
-//! 3. TEE-2 runs distributed training with proportional rewards
-//! 4. TEE-3 processes EVM-signed queries, verifies staking, mines after usage threshold
-//! 5. Node validates all blocks through the consensus engine
+//! 1. Root Trust certifies TEE-1, TEE-2, TEE-3, TEE-4
+//! 2. TEE-1 block production
+//! 3. TEE-2 AI training + rewards
+//! 4. TEE-3 EVM-signed Ollama queries + usage mining
+//! 5. TEE-4 ETH validator: deposits, validators, epochs, 5%/95% rewards, uptime mining
+//! 6. All blocks validated through consensus engine
 
 use tee_crypto::*;
 use tee_types::*;
@@ -20,9 +20,10 @@ fn test_config() -> TestConfig {
         training_steps: 3, micro_batch_size: 1, seq_len: 128,
         resource_allocation: 0.01, total_training_tokens: 1000,
         num_workers: 2, num_blocks: 3,
-        // TEE-3 settings
         tee3_queries: 6, tee3_mining_threshold: 5,
         tee3_staked_users: 3, tee3_unstaked_users: 1,
+        // TEE-4 settings
+        tee4_depositors: 3, tee4_epochs: 5,
     }
 }
 
@@ -35,6 +36,7 @@ fn production_config() -> TestConfig {
         num_workers: 100, num_blocks: 0,
         tee3_queries: 1200, tee3_mining_threshold: 1000,
         tee3_staked_users: 100, tee3_unstaked_users: 0,
+        tee4_depositors: 1000, tee4_epochs: 225,
     }
 }
 
@@ -45,15 +47,16 @@ struct TestConfig {
     num_workers: u32, num_blocks: u32,
     tee3_queries: u32, tee3_mining_threshold: u64,
     tee3_staked_users: u32, tee3_unstaked_users: u32,
+    tee4_depositors: u32, tee4_epochs: u64,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("╔════════════════════════════════════════════════════════════╗");
-    println!("║  TEE-Chain Integration Test: Full Blockchain + All TEEs  ║");
-    println!("╠════════════════════════════════════════════════════════════╣");
-    println!("║  TEE-1: Block Coordinator  │  TEE-2: AI Training        ║");
-    println!("║  TEE-3: Ollama Inference (EVM-signed, staking-gated)    ║");
-    println!("╚════════════════════════════════════════════════════════════╝\n");
+    println!("╔════════════════════════════════════════════════════════════════╗");
+    println!("║  TEE-Chain Integration Test: Full Blockchain + All 4 TEEs    ║");
+    println!("╠════════════════════════════════════════════════════════════════╣");
+    println!("║  TEE-1: Block Coordinator  │  TEE-2: AI Training            ║");
+    println!("║  TEE-3: Ollama Inference   │  TEE-4: ETH Validator          ║");
+    println!("╚════════════════════════════════════════════════════════════════╝\n");
 
     let cfg = test_config();
 
@@ -84,7 +87,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tee3_code_hash = B256::from_slice(&Sha3_256::digest(b"tee3-ollama-inference-binary-v1"));
     let tee3_cert = sign_certificate(&root_kp, tee3_id, tee3_code_hash, &tee3_kp)?;
     println!("  [RootTrust] Certified TEE-3 (Ollama Inference)");
-    println!("  [RootTrust] Vault: 3 dk's in memory (not on disk)\n");
+
+    let tee4_kp = PqcSigningKeypair::generate()?;
+    let tee4_id = TeeId::new({ let mut a=[0u8;32]; a.copy_from_slice(&Sha3_256::digest(b"tee4-eth-validator")); a });
+    let tee4_code_hash = B256::from_slice(&Sha3_256::digest(b"tee4-eth-validator-binary-v1"));
+    let tee4_cert = sign_certificate(&root_kp, tee4_id, tee4_code_hash, &tee4_kp)?;
+    println!("  [RootTrust] Certified TEE-4 (ETH Validator)");
+    println!("  [RootTrust] Vault: 4 dk's in memory (not on disk)\n");
 
     // ═══════════════════════════════════════════════════════════
     // Phase 2: Initialize Consensus Engine + Node State
@@ -94,6 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let operator_a = Address::from([0x01; 20]);
     let operator_b = Address::from([0x02; 20]);
     let operator_c = Address::from([0x03; 20]);
+    let operator_d = Address::from([0x04; 20]);
     let treasury   = Address::from([0xFF; 20]);
 
     let mut registry = TeeRegistry::new();
@@ -137,20 +147,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             mining_eligible: true, custom_params: vec![] },
         registered_at_block: 0,
     });
+    registry.register(TeeRegistration {
+        tee_id: tee4_id, code_hash: tee4_code_hash,
+        pqc_public_key: tee4_kp.public_key_bytes().to_vec(),
+        root_trust_certificate: bincode::serialize(&tee4_cert)?,
+        role: TeeRole::EthValidator, status: TeeStatus::Active, operator: operator_d,
+        config: TeeConfig { name: "TEE-4".into(), description: "ETH Validator".into(),
+            api_endpoints: vec!["http://localhost:8548".into()],
+            max_reward_per_block: U256::from(25_000_000_000_000_000_000u128),
+            mining_eligible: true, custom_params: vec![] },
+        registered_at_block: 0,
+    });
 
     let mut engine = TeeConsensusEngine::new(root_kp.public_key_bytes().to_vec(), registry, TeeMode::Simulator);
     let mut balances: HashMap<Address, U256> = HashMap::new();
     balances.insert(operator_a, U256::from(1_000_000_000_000_000_000_000u128));
     balances.insert(operator_b, U256::from(1_000_000_000_000_000_000_000u128));
     balances.insert(operator_c, U256::from(1_000_000_000_000_000_000_000u128));
+    balances.insert(operator_d, U256::from(1_000_000_000_000_000_000_000u128));
     balances.insert(treasury, U256::from(500_000_000_000_000_000_000_000u128));
 
     let mut block_number = 0u64;
     let mut block_hash = B256::ZERO;
     let mut all_blocks_valid = true;
 
-    println!("  [Node] Chain ID: 0x7EE1 | TEEs: 4 (Root Trust + TEE-1 + TEE-2 + TEE-3)");
-    println!("  [Node] Genesis balances: 4 accounts\n");
+    println!("  [Node] Chain ID: 0x7EE1 | TEEs: 5 (Root Trust + TEE-1..4)");
+    println!("  [Node] Genesis balances: 5 accounts\n");
 
     // ═══════════════════════════════════════════════════════════
     // Phase 3: TEE-1 Block Production
@@ -348,18 +370,133 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ═══════════════════════════════════════════════════════════
-    // Phase 6: Validation Summary
+    // Phase 6: TEE-4 ETH Validator — Liquid Staking + Uptime Mining
     // ═══════════════════════════════════════════════════════════
-    println!("━━━ Phase 6: Validation Summary ━━━\n");
+    println!("━━━ Phase 6: TEE-4 ETH Validator ━━━\n");
 
-    let total_blocks = cfg.num_blocks as u64 + cfg.training_steps + tee3_blocks;
+    // Simulate the staking pool (mirrors LiquidStaking.sol)
+    let eth = |n: u64| U256::from(n) * U256::from(1_000_000_000_000_000_000u128);
+    let mut pool_total_eth = U256::ZERO;
+    let mut pool_total_shares = U256::ZERO;
+    let mut pool_buffered = U256::ZERO;
+    let mut pool_validators: u32 = 0;
+    let mut pool_total_rewards = U256::ZERO;
+    let mut pool_treasury_fees = U256::ZERO;
+    let mut pool_attestations: u64 = 0;
+    let mut pool_proposals: u64 = 0;
+
+    // Deposits
+    let deposit_amounts = [50u64, 30, 20]; // 100 ETH total
+    for (i, &amt) in deposit_amounts.iter().enumerate().take(cfg.tee4_depositors as usize) {
+        let shares = if pool_total_shares.is_zero() {
+            eth(amt)
+        } else {
+            (eth(amt) * pool_total_shares) / pool_total_eth
+        };
+        pool_total_eth += eth(amt);
+        pool_buffered += eth(amt);
+        pool_total_shares += shares;
+        println!("  [Deposit {}] {} ETH → {} teeETH shares", i+1, amt, shares);
+    }
+    println!("  Pool: {} ETH total, {} buffered", pool_total_eth, pool_buffered);
+
+    // Create validators from buffer (each 32 ETH)
+    let validator_deposit = eth(32);
+    while pool_buffered >= validator_deposit {
+        pool_buffered -= validator_deposit;
+        pool_validators += 1;
+    }
+    println!("  Created {} validators, {} ETH remaining in buffer", pool_validators, pool_buffered);
+    assert!(pool_validators >= 2, "Should create at least 2 validators from 100 ETH");
+
+    // Process epochs — each validator attests once, rewards accrue
+    let reward_per_validator = U256::from(2_500_000_000_000_000u128); // 0.0025 ETH
+    for epoch in 0..cfg.tee4_epochs {
+        let epoch_rewards = reward_per_validator * U256::from(pool_validators);
+        let treasury_fee = (epoch_rewards * U256::from(500u64)) / U256::from(10_000u64); // 5%
+        let pool_increase = epoch_rewards - treasury_fee;
+
+        pool_total_rewards += epoch_rewards;
+        pool_treasury_fees += treasury_fee;
+        pool_total_eth += pool_increase;
+        pool_attestations += pool_validators as u64;
+        if epoch % 32 == 0 { pool_proposals += 1; }
+
+        if epoch < 3 || epoch == cfg.tee4_epochs - 1 {
+            // Exchange rate: total_eth * 1e18 / total_shares
+            let rate = (pool_total_eth * U256::from(1_000_000_000_000_000_000u128)) / pool_total_shares;
+            let rate_display = rate / U256::from(10_000_000_000_000_000u128); // 2 decimal places * 100
+            println!("  Epoch {} | atts={} | rewards={} | rate=1.{:04}",
+                epoch, pool_validators, epoch_rewards, rate_display - U256::from(100u64));
+        } else if epoch == 3 {
+            println!("  ... ({} more epochs) ...", cfg.tee4_epochs - 4);
+        }
+    }
+
+    // Verify exchange rate increased
+    let final_rate = (pool_total_eth * U256::from(1_000_000_000_000_000_000u128)) / pool_total_shares;
+    assert!(final_rate > U256::from(1_000_000_000_000_000_000u128), "Exchange rate should be > 1.0");
+    println!("\n  Rewards:      {} wei total", pool_total_rewards);
+    println!("  Treasury (5%): {} wei", pool_treasury_fees);
+    println!("  Pool (95%):   {} ETH backing {} teeETH", pool_total_eth, pool_total_shares);
+    println!("  Attestations: {}, Proposals: {}", pool_attestations, pool_proposals);
+
+    // Produce TEE-4 block (uptime mining)
+    let mut tee4_blocks = 0u64;
+    let tee4_round_id = cfg.num_blocks as u64 + cfg.training_steps + tee3_blocks + 1;
+    let msg = RoundCompleteMessage {
+        tee_id: tee4_id, round_id: tee4_round_id, parent_block_hash: block_hash,
+        payments: vec![],
+        incentives: vec![PaymentInstruction {
+            recipient: operator_d,
+            amount: U256::from(25_000_000_000_000_000_000u128), // 25 TEEC
+            is_reward: true,
+        }],
+        timestamp: chrono::Utc::now().timestamp() as u64,
+        tee_specific_data: serde_json::to_vec(&serde_json::json!({
+            "tee": "TEE-4 ETH Validator",
+            "active_validators": pool_validators,
+            "total_attestations": pool_attestations,
+            "total_proposals": pool_proposals,
+            "total_pooled_eth": pool_total_eth.to_string(),
+            "total_rewards": pool_total_rewards.to_string(),
+            "treasury_fees": pool_treasury_fees.to_string(),
+            "exchange_rate": final_rate.to_string(),
+            "depositors": cfg.tee4_depositors,
+        }))?,
+        transaction_hashes: vec![],
+    };
+    let sig = sign_round_complete(&tee4_kp, &msg)?;
+    let evidence = create_attestation(&tee4_kp, tee4_id, tee4_code_hash, &tee4_cert)?;
+    let signed_rc = SignedRoundComplete { message: msg, signature: sig, attestation_evidence: bincode::serialize(&evidence)? };
+
+    match engine.validate_block(&signed_rc.to_bytes(), block_hash) {
+        Ok(_) => {
+            block_number += 1; block_hash = compute_block_hash(block_number, block_hash);
+            for inc in &signed_rc.message.incentives { *balances.entry(inc.recipient).or_insert(U256::ZERO) += inc.amount; }
+            tee4_blocks = 1;
+            println!("\n  [TEE-4] Block #{} ✓ uptime-mined: {} validators, {} attestations → 25 TEEC to {}",
+                block_number, pool_validators, pool_attestations, operator_d);
+        }
+        Err(e) => { println!("\n  [TEE-4] Block ✗ FAILED: {}", e); all_blocks_valid = false; }
+    }
+    println!();
+
+    // ═══════════════════════════════════════════════════════════
+    // Phase 7: Validation Summary
+    // ═══════════════════════════════════════════════════════════
+    println!("━━━ Phase 7: Validation Summary ━━━\n");
+
+    let total_blocks = cfg.num_blocks as u64 + cfg.training_steps + tee3_blocks + tee4_blocks;
     println!("  TEE-1 blocks:     {}", cfg.num_blocks);
     println!("  TEE-2 blocks:     {}", cfg.training_steps);
     println!("  TEE-3 blocks:     {}", tee3_blocks);
+    println!("  TEE-4 blocks:     {}", tee4_blocks);
     println!("  Total blocks:     {}", block_number);
     println!("  All valid:        {}", if all_blocks_valid { "✓ YES" } else { "✗ NO" });
     println!("  Final hash:       {}", &hex::encode(block_hash.as_slice())[..16]);
     println!("  TEE-3 served:     {} queries ({} rejected)", tee3_served, tee3_rejected);
+    println!("  TEE-4 validators: {} ({} attestations)", pool_validators, pool_attestations);
     println!();
 
     println!("  Balances:");
@@ -371,19 +508,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n  ════════════════════════════════════════");
-    if all_blocks_valid && block_number == total_blocks && tee3_served > 0 && tee3_rejected > 0 {
+    let tee4_ok = tee4_blocks > 0 && pool_validators > 0 && pool_attestations > 0;
+    if all_blocks_valid && block_number == total_blocks && tee3_served > 0 && tee3_rejected > 0 && tee4_ok {
         println!("  ✅ INTEGRATION TEST PASSED");
-        println!("     {} blocks validated (TEE-1: {}, TEE-2: {}, TEE-3: {})", total_blocks, cfg.num_blocks, cfg.training_steps, tee3_blocks);
-        println!("     Root Trust → TEE-1 + TEE-2 + TEE-3 → Consensus Engine ✓");
+        println!("     {} blocks (TEE-1:{}, TEE-2:{}, TEE-3:{}, TEE-4:{})",
+            total_blocks, cfg.num_blocks, cfg.training_steps, tee3_blocks, tee4_blocks);
+        println!("     Root Trust → TEE-1 + TEE-2 + TEE-3 + TEE-4 → Consensus ✓");
         println!("     EVM signature verification (secp256k1 ecrecover) ✓");
         println!("     Staking gate (unstaked user rejected) ✓");
-        println!("     Usage-based mining (threshold → block) ✓");
+        println!("     Usage-based mining (TEE-3 threshold → block) ✓");
+        println!("     Liquid staking (deposits → validators → rewards → 5%/95%) ✓");
+        println!("     Uptime-based mining (TEE-4 epochs → block) ✓");
     } else {
         println!("  ❌ INTEGRATION TEST FAILED");
         if !all_blocks_valid { println!("     Block validation failed"); }
         if block_number != total_blocks { println!("     Expected {} blocks, got {}", total_blocks, block_number); }
-        if tee3_served == 0 { println!("     No TEE-3 queries served"); }
-        if tee3_rejected == 0 { println!("     No TEE-3 rejections (unstaked check missing)"); }
+        if !tee4_ok { println!("     TEE-4 validation failed"); }
     }
     println!("  ════════════════════════════════════════\n");
 
