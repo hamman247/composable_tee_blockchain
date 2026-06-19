@@ -137,14 +137,25 @@ impl TeeConsensusEngine {
             ));
         }
 
-        // Step 8: Verify reward caps
+        // Step 8: Verify reward caps (individual AND total)
         let max_reward = registration.config.max_reward_per_block;
+        let mut total_incentive = alloy_primitives::U256::ZERO;
         for incentive in &signed_rc.message.incentives {
             if incentive.amount > max_reward {
                 return Err(ConsensusError::RewardExceedsMax(
                     format!("Incentive {} exceeds max {}", incentive.amount, max_reward),
                 ));
             }
+            total_incentive = total_incentive.checked_add(incentive.amount)
+                .ok_or_else(|| ConsensusError::RewardExceedsMax(
+                    "Total incentive amount overflow".to_string(),
+                ))?;
+        }
+        // SECURITY: Cap the sum of ALL incentives, not just individual ones
+        if total_incentive > max_reward {
+            return Err(ConsensusError::RewardExceedsMax(
+                format!("Total incentives {} exceed max {}", total_incentive, max_reward),
+            ));
         }
 
         // Update last round ID

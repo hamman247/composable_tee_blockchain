@@ -21,11 +21,21 @@ contract JobMarketplace {
     mapping(bytes32 => Job) public jobs;
     mapping(bytes32 => Deposit[]) public deposits;
     bytes32[] public jobIds;
+    address public governance;
 
     event JobRegistered(bytes32 indexed jobId, bytes32 codeHash, address creator);
     event Deposited(bytes32 indexed jobId, address depositor, uint256 amount, uint256 lockUpEnd);
     event Withdrawn(bytes32 indexed jobId, uint256 depositId, address depositor, uint256 amount);
     event PayoutClaimed(bytes32 indexed jobId, address[] operators, uint256[] amounts);
+
+    modifier onlyGovernance() {
+        require(msg.sender == governance, "Only governance");
+        _;
+    }
+
+    constructor(address _governance) {
+        governance = _governance;
+    }
 
     /// @notice Register a new TEE job (does NOT qualify for mining by default)
     function registerJob(bytes32 codeHash, bytes calldata config) external returns (bytes32) {
@@ -72,13 +82,14 @@ contract JobMarketplace {
         emit Withdrawn(jobId, depositId, msg.sender, d.amount);
     }
 
-    /// @notice TEE claims payout for operators (requires valid TEE signature verified off-chain)
+    /// @notice Claim payout for operators (governance-only, called during validated block processing)
+    /// @dev Previously this accepted a TEE signature parameter but never verified it.
+    ///      Now restricted to governance to ensure payouts only occur through validated blocks.
     function claimPayout(
         bytes32 jobId,
         address[] calldata operators,
-        uint256[] calldata amounts,
-        bytes calldata /* teeSig - verified by node */
-    ) external {
+        uint256[] calldata amounts
+    ) external onlyGovernance {
         require(operators.length == amounts.length, "Length mismatch");
         Job storage job = jobs[jobId];
         require(job.active, "Job not active");

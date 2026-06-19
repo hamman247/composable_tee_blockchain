@@ -15,7 +15,7 @@ use alloy_primitives::Address;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Maximum age of a signed query before it's rejected (seconds).
 const MAX_AGE_SECS: u64 = 300;
@@ -130,9 +130,13 @@ pub fn recover_signer(query: &SignedQuery) -> Result<Address, SignatureError> {
 }
 
 /// Signature verifier with replay protection.
+///
+/// Uses a monotonic nonce model: for each address, only the highest nonce
+/// seen is tracked. Any nonce ≤ the previous maximum is rejected.
+/// This uses O(1) memory per address, preventing memory exhaustion attacks.
 pub struct SignatureVerifier {
-    /// Seen nonces per address.
-    seen_nonces: HashMap<Address, HashSet<u64>>,
+    /// Highest nonce seen per address (monotonic — only increases).
+    last_nonce: HashMap<Address, u64>,
     /// Maximum query age in seconds.
     max_age_secs: u64,
 }
@@ -140,7 +144,7 @@ pub struct SignatureVerifier {
 impl SignatureVerifier {
     pub fn new() -> Self {
         Self {
-            seen_nonces: HashMap::new(),
+            last_nonce: HashMap::new(),
             max_age_secs: MAX_AGE_SECS,
         }
     }
@@ -159,21 +163,16 @@ impl SignatureVerifier {
         // 2. Recover signer
         let signer = recover_signer(query)?;
 
-        // 3. Check replay
-        let nonces = self.seen_nonces.entry(signer).or_default();
-        if nonces.contains(&query.nonce) {
+        // 3. Check replay using monotonic nonce
+        // Nonce must be strictly greater than the last seen nonce for this address.
+        let last = self.last_nonce.entry(signer).or_insert(0);
+        if query.nonce <= *last {
             return Err(SignatureError::ReplayedNonce {
                 address: signer,
                 nonce: query.nonce,
             });
         }
-        nonces.insert(query.nonce);
-
-        // Prune old nonces (keep last 10000 per address)
-        if nonces.len() > 10_000 {
-            let min = *nonces.iter().min().unwrap();
-            nonces.remove(&min);
-        }
+        *last = query.nonce;
 
         Ok(VerifiedQuery {
             signer,
@@ -186,7 +185,7 @@ impl SignatureVerifier {
 
     /// Number of unique addresses that have submitted queries.
     pub fn unique_signers(&self) -> usize {
-        self.seen_nonces.len()
+        self.last_nonce.len()
     }
 }
 

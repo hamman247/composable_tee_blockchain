@@ -37,6 +37,9 @@ impl AttestationVerifier {
 
     /// Verify attestation evidence and return the result.
     pub fn verify(&self, evidence: &AttestationEvidence) -> Result<AttestationResult, AttestationError> {
+        /// Maximum allowed clock skew for timestamps (5 minutes).
+        const MAX_CLOCK_SKEW_SECS: u64 = 300;
+
         // Step 1: Verify the Root Trust certificate signature
         let cert = &evidence.root_trust_cert;
         let cert_valid = self.verify_root_trust_cert(cert)?;
@@ -44,12 +47,28 @@ impl AttestationVerifier {
             return Ok(AttestationResult::InvalidRootTrust);
         }
 
-        // Step 2: Check certificate hasn't expired
-        if cert.expires_at > 0 {
-            let now = chrono::Utc::now().timestamp() as u64;
-            if now > cert.expires_at {
-                return Ok(AttestationResult::Expired);
-            }
+        // Step 2: Check certificate hasn't expired AND isn't from the future
+        let now = chrono::Utc::now().timestamp() as u64;
+        if cert.expires_at > 0 && now > cert.expires_at {
+            return Ok(AttestationResult::Expired);
+        }
+        // SECURITY: Reject certificates issued in the future (beyond clock skew tolerance)
+        if cert.issued_at > now + MAX_CLOCK_SKEW_SECS {
+            return Ok(AttestationResult::Invalid(
+                format!(
+                    "Certificate issued_at ({}) is too far in the future (now={}, max_skew={}s)",
+                    cert.issued_at, now, MAX_CLOCK_SKEW_SECS
+                ),
+            ));
+        }
+        // SECURITY: Reject evidence with a timestamp too far in the future
+        if evidence.timestamp > now + MAX_CLOCK_SKEW_SECS {
+            return Ok(AttestationResult::Invalid(
+                format!(
+                    "Evidence timestamp ({}) is too far in the future (now={}, max_skew={}s)",
+                    evidence.timestamp, now, MAX_CLOCK_SKEW_SECS
+                ),
+            ));
         }
 
         // Step 3: Verify the TEE ID matches the certificate subject
