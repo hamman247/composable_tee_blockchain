@@ -46,8 +46,6 @@ contract TEERegistry {
     }
 
     /// @notice Register a new TEE (governance-only)
-    /// @dev Mining eligibility is always false on registration. Use setMiningEligible()
-    ///      via a DAO governance proposal to grant mining rights.
     function registerTEE(
         bytes32 teeId,
         bytes32 codeHash,
@@ -57,9 +55,11 @@ contract TEERegistry {
         address operator,
         string calldata _name,
         string calldata _description,
-        uint256 maxRewardPerBlock
+        uint256 maxRewardPerBlock,
+        bool _miningEligible
     ) external onlyGovernance {
         require(tees[teeId].teeId == bytes32(0), "TEE already registered");
+        require(!(role == TeeRole.RootTrust && _miningEligible), "Root Trust cannot mine");
 
         tees[teeId] = TeeRecord({
             teeId: teeId,
@@ -72,7 +72,7 @@ contract TEERegistry {
             name: _name,
             description: _description,
             maxRewardPerBlock: maxRewardPerBlock,
-            miningEligible: false, // SECURITY: always false — must be promoted via DAO vote
+            miningEligible: _miningEligible,
             registeredAtBlock: block.number
         });
         teeIds.push(teeId);

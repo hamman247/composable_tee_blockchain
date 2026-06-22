@@ -11,6 +11,10 @@ path = "src/main.rs"
 name = "integration-test"
 path = "src/integration_test.rs"
 
+[[bin]]
+name = "local-testnet"
+path = "src/local_testnet.rs"
+
 [dependencies]
 tee-types = { workspace = true }
 tee-crypto = { workspace = true }

@@ -68,6 +68,7 @@ contract TEERegistryTest is Test {
     }
 
     function test_RegisterTEE() public {
+        vm.prank(gov);
         registry.registerTEE(
             teeId, codeHash, hex"aabb", hex"ccdd",
             TEERegistry.TeeRole.BlockCoordinator, address(this),
@@ -79,6 +80,7 @@ contract TEERegistryTest is Test {
     }
 
     function test_RootTrustCannotMine() public {
+        vm.prank(gov);
         vm.expectRevert("Root Trust cannot mine");
         registry.registerTEE(
             teeId, codeHash, hex"aabb", hex"ccdd",
@@ -88,6 +90,7 @@ contract TEERegistryTest is Test {
     }
 
     function test_FreezeTEE_OnlyStopsMining() public {
+        vm.prank(gov);
         registry.registerTEE(
             teeId, codeHash, hex"aabb", hex"ccdd",
             TEERegistry.TeeRole.BlockCoordinator, address(this),
@@ -105,6 +108,7 @@ contract TEERegistryTest is Test {
     }
 
     function test_UnfreezeTEE() public {
+        vm.prank(gov);
         registry.registerTEE(
             teeId, codeHash, hex"aabb", hex"ccdd",
             TEERegistry.TeeRole.BlockCoordinator, address(this),
@@ -121,6 +125,7 @@ contract TEERegistryTest is Test {
     }
 
     function test_OnlyGovernanceCanFreeze() public {
+        vm.prank(gov);
         registry.registerTEE(
             teeId, codeHash, hex"aabb", hex"ccdd",
             TEERegistry.TeeRole.BlockCoordinator, address(this),
@@ -131,6 +136,7 @@ contract TEERegistryTest is Test {
     }
 
     function test_DuplicateRegistrationFails() public {
+        vm.startPrank(gov);
         registry.registerTEE(
             teeId, codeHash, hex"aabb", hex"ccdd",
             TEERegistry.TeeRole.BlockCoordinator, address(this),
@@ -142,9 +148,11 @@ contract TEERegistryTest is Test {
             TEERegistry.TeeRole.BlockCoordinator, address(this),
             "TEE-1", "Test", 100 ether, true
         );
+        vm.stopPrank();
     }
 
     function test_DeregisteredTEE_NotOperational() public {
+        vm.prank(gov);
         registry.registerTEE(
             teeId, codeHash, hex"aabb", hex"ccdd",
             TEERegistry.TeeRole.BlockCoordinator, address(this),
@@ -177,15 +185,15 @@ contract DAOGovernanceTest is Test {
         // Deploy DAO
         dao = new DAOGovernance(address(token), address(registry), address(treasury));
 
-        // Transfer governance to DAO
-        registry.setGovernance(address(dao));
-
-        // Register a user TEE for testing (registerTEE is open to anyone)
+        // Register a user TEE for testing (before transferring governance)
         registry.registerTEE(
             teeId, keccak256("code"), hex"aabb", hex"ccdd",
             TEERegistry.TeeRole.UserJob, alice,
             "User TEE", "Test job", 50 ether, true
         );
+
+        // Transfer governance to DAO
+        registry.setGovernance(address(dao));
 
         // Fund and stake alice (2M tokens, stakes 1M)
         token.transfer(alice, 2_000_000 ether);
@@ -216,6 +224,7 @@ contract DAOGovernanceTest is Test {
     function test_ProposeAndVote_Pass() public {
         // First revoke mining so we can promote
         bytes32 newTeeId = keccak256("new-tee");
+        vm.prank(address(dao));
         registry.registerTEE(
             newTeeId, keccak256("code2"), hex"eeff", hex"1122",
             TEERegistry.TeeRole.AiTraining, bob,
@@ -236,6 +245,7 @@ contract DAOGovernanceTest is Test {
         dao.vote(pid, true);
 
         // Fast forward past voting period
+        vm.roll(block.number + 302401);
         vm.warp(block.timestamp + 7 days + 1);
 
         uint256 aliceBalBefore = token.balanceOf(alice);
@@ -267,6 +277,7 @@ contract DAOGovernanceTest is Test {
         );
 
         // No votes → quorum not met
+        vm.roll(block.number + 302401);
         vm.warp(block.timestamp + 7 days + 1);
 
         uint256 aliceBalBefore = token.balanceOf(alice);
@@ -305,6 +316,7 @@ contract DAOGovernanceTest is Test {
             teeId, "", true, 50 ether
         );
 
+        vm.roll(block.number + 302401);
         vm.warp(block.timestamp + 7 days + 1);
 
         vm.prank(alice);
@@ -386,6 +398,7 @@ contract DAOGovernanceTest is Test {
         vm.prank(bob);
         dao.vote(1, true);
 
+        vm.roll(block.number + 302401);
         vm.warp(block.timestamp + 7 days + 1);
         dao.execute(1);
 
@@ -407,6 +420,7 @@ contract DAOGovernanceTest is Test {
         vm.prank(bob);
         dao.vote(1, false);
 
+        vm.roll(block.number + 302401);
         vm.warp(block.timestamp + 7 days + 1);
 
         uint256 treasuryBalBefore = token.balanceOf(address(treasury));
@@ -431,6 +445,7 @@ contract DAOGovernanceTest is Test {
         dao.emergencyFreeze(teeId);
 
         // No votes at all → fails due to quorum not met
+        vm.roll(block.number + 302401);
         vm.warp(block.timestamp + 7 days + 1);
         dao.execute(1);
 
@@ -446,7 +461,7 @@ contract JobMarketplaceTest is Test {
     address operator = makeAddr("operator");
 
     function setUp() public {
-        marketplace = new JobMarketplace();
+        marketplace = new JobMarketplace(address(this));
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
     }
@@ -488,7 +503,7 @@ contract JobMarketplaceTest is Test {
         uint256[] memory amts = new uint256[](1);
         amts[0] = 5 ether;
 
-        marketplace.claimPayout(jobId, ops, amts, hex"");
+        marketplace.claimPayout(jobId, ops, amts);
         assertEq(operator.balance, 5 ether);
     }
 }
