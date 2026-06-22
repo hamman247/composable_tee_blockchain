@@ -77,11 +77,16 @@ impl LrScheduler {
             Self::CosineWithWarmup { warmup_steps, total_steps, min_lr } => {
                 if step < *warmup_steps {
                     // Linear warmup
+                    if *warmup_steps == 0 { return base_lr; }
                     base_lr * (step as f64 / *warmup_steps as f64)
+                } else if *total_steps <= *warmup_steps {
+                    // SECURITY: No decay phase — avoid division by zero
+                    *min_lr
                 } else {
                     // Cosine decay
                     let progress = (step - warmup_steps) as f64
                         / (total_steps - warmup_steps) as f64;
+                    let progress = progress.min(1.0); // Clamp to prevent overshoot
                     let cosine = (1.0 + (std::f64::consts::PI * progress).cos()) / 2.0;
                     min_lr + (base_lr - min_lr) * cosine
                 }

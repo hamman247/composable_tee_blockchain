@@ -67,7 +67,7 @@ impl EthValidatorTee {
     }
 
     /// Process an ETH deposit into the pool.
-    pub fn deposit(&mut self, depositor: Address, amount: U256) -> U256 {
+    pub fn deposit(&mut self, depositor: Address, amount: U256) -> Result<U256, staking_pool::PoolError> {
         self.pool.deposit(depositor, amount)
     }
 
@@ -75,7 +75,9 @@ impl EthValidatorTee {
     pub fn create_validators(&mut self) -> u32 {
         let mut created = 0;
         while self.pool.can_create_validator() {
-            self.pool.create_validator();
+            if self.pool.create_validator().is_err() {
+                break;
+            }
             self.validator.add_validator();
             created += 1;
         }
@@ -137,7 +139,13 @@ impl EthValidatorTee {
     }
 
     /// Produce a block on the TEE-chain.
+    ///
+    /// SECURITY: Enforces mining eligibility check before producing a block.
     pub fn produce_block(&mut self, parent_hash: B256) -> Result<SignedRoundComplete, Box<dyn std::error::Error>> {
+        if !self.can_mine() {
+            return Err("Cannot mine: insufficient uptime, no validators, or attestation rate below 95%".into());
+        }
+
         self.round_id += 1;
 
         let tee_data = serde_json::to_vec(&serde_json::json!({
@@ -240,10 +248,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let alice = Address::from([0xA1;20]);
     let bob = Address::from([0xB0;20]);
 
-    let shares_a = tee.deposit(alice, U256::from(50_000_000_000_000_000_000u128)); // 50 ETH
+    let shares_a = tee.deposit(alice, U256::from(50_000_000_000_000_000_000u128)).unwrap(); // 50 ETH
     println!("  Alice deposits 50 ETH → {} teeETH", shares_a);
 
-    let shares_b = tee.deposit(bob, U256::from(30_000_000_000_000_000_000u128)); // 30 ETH
+    let shares_b = tee.deposit(bob, U256::from(30_000_000_000_000_000_000u128)).unwrap(); // 30 ETH
     println!("  Bob deposits 30 ETH → {} teeETH", shares_b);
 
     println!("  Pool: {} ETH total, {} buffered", tee.pool.total_pooled_eth(), tee.pool.buffered());

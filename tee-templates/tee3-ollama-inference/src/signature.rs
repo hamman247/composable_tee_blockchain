@@ -20,6 +20,10 @@ use std::collections::HashMap;
 /// Maximum age of a signed query before it's rejected (seconds).
 const MAX_AGE_SECS: u64 = 300;
 
+/// Maximum allowed tokens per query to prevent compute DoS.
+/// 8192 tokens is a generous limit for most LLM use cases.
+const MAX_TOKENS_LIMIT: u32 = 8192;
+
 /// A query signed by the user's EVM wallet.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedQuery {
@@ -65,6 +69,8 @@ pub enum SignatureError {
     Expired { age_secs: u64, max_age: u64 },
     /// Nonce has already been used by this address.
     ReplayedNonce { address: Address, nonce: u64 },
+    /// Requested max_tokens exceeds the allowed limit.
+    TokenLimitExceeded { requested: u32, max: u32 },
 }
 
 impl std::fmt::Display for SignatureError {
@@ -77,6 +83,9 @@ impl std::fmt::Display for SignatureError {
             }
             Self::ReplayedNonce { address, nonce } => {
                 write!(f, "Replayed nonce {} from {}", nonce, address)
+            }
+            Self::TokenLimitExceeded { requested, max } => {
+                write!(f, "Requested {} tokens exceeds max {}", requested, max)
             }
         }
     }
@@ -149,8 +158,16 @@ impl SignatureVerifier {
         }
     }
 
-    /// Verify a signed query: check signature, expiry, and replay.
+    /// Verify a signed query: check signature, expiry, token limit, and replay.
     pub fn verify(&mut self, query: &SignedQuery) -> Result<VerifiedQuery, SignatureError> {
+        // 0. Check token limit BEFORE expensive crypto operations
+        if query.max_tokens > MAX_TOKENS_LIMIT {
+            return Err(SignatureError::TokenLimitExceeded {
+                requested: query.max_tokens,
+                max: MAX_TOKENS_LIMIT,
+            });
+        }
+
         // 1. Check timestamp freshness
         let now = chrono::Utc::now().timestamp() as u64;
         if query.timestamp < now.saturating_sub(self.max_age_secs) {

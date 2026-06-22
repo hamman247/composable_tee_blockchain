@@ -98,6 +98,11 @@ pub struct GossipDiscovery {
     bootstrap_peers: Vec<String>,
 }
 
+/// Maximum number of coordinator endpoints to store from gossip.
+const MAX_GOSSIP_ENDPOINTS: usize = 1_000;
+/// Maximum number of known peers to store.
+const MAX_GOSSIP_PEERS: usize = 10_000;
+
 impl GossipDiscovery {
     pub fn new(bootstrap_peers: Vec<String>) -> Self {
         Self {
@@ -139,11 +144,20 @@ impl GossipDiscovery {
     }
 
     /// Process a received gossip message.
+    /// SECURITY: Limits are enforced to prevent memory exhaustion from malicious gossip.
     pub fn process_gossip(&mut self, msg: &GossipMessage) {
         for ep in &msg.coordinator_endpoints {
+            if self.known_endpoints.len() >= MAX_GOSSIP_ENDPOINTS {
+                tracing::warn!("Gossip endpoint limit ({}) reached, dropping", MAX_GOSSIP_ENDPOINTS);
+                break;
+            }
             self.known_endpoints.insert(ep.clone());
         }
         for peer in &msg.known_peers {
+            if self.known_peers.len() >= MAX_GOSSIP_PEERS {
+                tracing::warn!("Gossip peer limit ({}) reached, dropping", MAX_GOSSIP_PEERS);
+                break;
+            }
             self.known_peers.insert(peer.clone());
         }
     }
