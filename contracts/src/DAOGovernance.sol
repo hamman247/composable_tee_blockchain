@@ -68,7 +68,10 @@ contract DAOGovernance {
     uint256 public constant QUORUM_BPS = 1000;           // 10% for normal votes
     uint256 public constant EMERGENCY_QUORUM_BPS = 200;   // 2% for initiating freeze
     uint256 public constant PROPOSAL_COLLATERAL = 1000 ether;
-    uint256 public constant EMERGENCY_COLLATERAL = 5000 ether;
+    /// @dev SECURITY [C2]: Increased from 5,000 to 50,000 to make freeze griefing unprofitable.
+    ///      A failed freeze costs the attacker 25,000 TEEC (50% slashed).
+    ///      This exceeds the weekly income of any single TEE, preventing profitable griefing.
+    uint256 public constant EMERGENCY_COLLATERAL = 50000 ether;
 
     /// @dev Dead address used for burning tokens
     address public constant BURN_ADDRESS = address(0xdead);
@@ -194,11 +197,20 @@ contract DAOGovernance {
                 emit FreezeLiftedAfterFailedVote(p.targetTeeId);
             }
 
-            // Slash collateral: 50% burned, 50% to treasury
-            uint256 burnAmount = p.collateral / 2;
-            uint256 treasuryAmount = p.collateral - burnAmount;
+            // Slash collateral: 25% burned, 25% to treasury, 50% to frozen TEE operator as compensation
+            uint256 burnAmount = p.collateral / 4;
+            uint256 treasuryAmount = p.collateral / 4;
+            uint256 compensation = p.collateral - burnAmount - treasuryAmount;
             stakingToken.transfer(BURN_ADDRESS, burnAmount);
             stakingToken.transfer(address(treasury), treasuryAmount);
+            // SECURITY [C2]: Compensate the frozen TEE operator for lost income
+            if (p.isEmergencyRevocation) {
+                (, , , , , , address teeOperator, , , , , ) = teeRegistry.tees(p.targetTeeId);
+                stakingToken.transfer(teeOperator, compensation);
+            } else {
+                // Non-emergency failed proposal: compensation goes to treasury
+                stakingToken.transfer(address(treasury), compensation);
+            }
             emit CollateralSlashed(proposalId, burnAmount, treasuryAmount);
         }
         emit ProposalExecuted(proposalId, p.status);

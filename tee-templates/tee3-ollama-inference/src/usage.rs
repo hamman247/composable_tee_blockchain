@@ -115,7 +115,11 @@ impl UsageTracker {
     }
 
     /// Record a completed query.
+    /// SECURITY [D8]: Individual records are capped at MAX_RECORDS to prevent
+    /// memory exhaustion if blocks can't be produced fast enough.
     pub fn record(&mut self, record: UsageRecord) {
+        const MAX_RECORDS: usize = 100_000;
+
         let tokens = record.tokens_in as u64 + record.tokens_out as u64;
         self.total_queries += 1;
         self.total_tokens += tokens;
@@ -131,7 +135,10 @@ impl UsageTracker {
         entry.tokens_in += record.tokens_in as u64;
         entry.tokens_out += record.tokens_out as u64;
 
-        self.records.push(record);
+        // Keep individual records only up to capacity (counters still track everything)
+        if self.records.len() < MAX_RECORDS {
+            self.records.push(record);
+        }
     }
 
     /// Check if the operator can mine a block.

@@ -73,6 +73,14 @@ impl ValidatorNode {
             false
         }
     }
+
+    /// SECURITY [D5]: Remove all Exited validators to prevent unbounded accumulation.
+    /// Should be called periodically (e.g., every 100 epochs).
+    pub fn compact_exited(&mut self) -> usize {
+        let before = self.validators.len();
+        self.validators.retain(|v| *v != ValidatorStatus::Exited);
+        before - self.validators.len()
+    }
 }
 
 #[cfg(test)]

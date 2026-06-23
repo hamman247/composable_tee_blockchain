@@ -217,7 +217,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    let mut engine = TeeConsensusEngine::new(root_kp.public_key_bytes().to_vec(), reg, TeeMode::Simulator);
+    let mut engine = TeeConsensusEngine::with_config(
+        root_kp.public_key_bytes().to_vec(), reg, TeeMode::Simulator,
+        tee_consensus::RateLimitConfig::test(),
+        tee_consensus::FairnessConfig::test(),
+    );
     let mut balances: HashMap<Address, U256> = HashMap::new();
     for &op in &ops { balances.insert(op, U256::from(1000u64) * U256::from(1_000_000_000_000_000_000u128)); }
 
@@ -287,7 +291,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let result = produce_block(
                 &kp2, &root_kp, id2, ch2, &c2, round[1], bh,
                 vec![], vec![PaymentInstruction { recipient: ops[1], amount: reward, is_reward: true }],
-                format!("{{\"step\":{},\"loss\":{:.4}}}", tee2_step, tee2_loss).into_bytes(),
+                format!("{{\"step\":{},\"loss\":{:.4},\"checkpoint_hash\":\"{:016x}\"}}",
+                    tee2_step, tee2_loss, tee2_step * 0xDEAD).into_bytes(),
                 vec![], &mut engine,
             )?;
             if let Some(src) = result {

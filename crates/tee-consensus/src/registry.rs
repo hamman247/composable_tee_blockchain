@@ -99,6 +99,14 @@ impl TeeRegistry {
         Some(tee_id)
     }
 
+    /// Peek at the next block producer without advancing the queue.
+    pub fn peek_next_block_producer(&self) -> Option<TeeId> {
+        if self.round_robin_queue.is_empty() {
+            return None;
+        }
+        Some(self.round_robin_queue[self.round_robin_index])
+    }
+
     /// Freeze a TEE (from DAO emergency action).
     pub fn freeze(&mut self, tee_id: &TeeId) -> Result<(), RegistryError> {
         let reg = self.registrations.get_mut(tee_id)

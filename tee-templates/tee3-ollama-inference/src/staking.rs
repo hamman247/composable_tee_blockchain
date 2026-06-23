@@ -16,6 +16,13 @@ pub const MIN_STAKE_WEI: u128 = 100_000_000_000_000_000_000; // 100 * 1e18
 /// Base rate limit (queries per epoch) for the minimum stake.
 const BASE_RATE_LIMIT: u64 = 100;
 
+/// SECURITY [F1]: Absolute maximum queries per epoch regardless of stake.
+/// Prevents a whale from saturating the backend.
+const MAX_QUERIES_PER_EPOCH: u64 = 10_000;
+
+/// SECURITY [F1]: Maximum queries per second per user (burst limit).
+const BURST_LIMIT_PER_SEC: u64 = 10;
+
 /// Epoch duration in seconds (1 hour).
 const EPOCH_DURATION_SECS: u64 = 3600;
 
@@ -112,13 +119,14 @@ impl StakingRegistry {
             });
         }
 
-        // Rate limit scales linearly with stake:
+        // Rate limit scales linearly with stake, capped at MAX_QUERIES_PER_EPOCH:
         // 100 TEEC → 100 queries/epoch
         // 1000 TEEC → 1000 queries/epoch
-        // 10000 TEEC → 10000 queries/epoch
+        // 100000 TEEC → capped at 10000 queries/epoch
         let stake_multiplier = staked / self.min_stake;
-        let queries_per_epoch = BASE_RATE_LIMIT
+        let uncapped = BASE_RATE_LIMIT
             * u64::try_from(stake_multiplier).unwrap_or(u64::MAX);
+        let queries_per_epoch = uncapped.min(MAX_QUERIES_PER_EPOCH);
         let tokens_per_epoch = queries_per_epoch * 1000; // ~1000 tokens per query avg
 
         Ok(UsageBudget {
@@ -140,11 +148,13 @@ impl StakingRegistry {
     }
 }
 
-/// Rate limiter that tracks per-epoch usage.
+/// Rate limiter that tracks per-epoch usage and per-second bursts.
 #[derive(Debug)]
 pub struct RateLimiter {
     /// Address → queries used in current epoch.
     usage: HashMap<Address, u64>,
+    /// SECURITY [F1]: Address → (current_second, queries_this_second).
+    burst_tracker: HashMap<Address, (u64, u64)>,
     /// Current epoch start timestamp.
     epoch_start: u64,
     /// Epoch duration in seconds.
@@ -155,6 +165,7 @@ impl RateLimiter {
     pub fn new() -> Self {
         Self {
             usage: HashMap::new(),
+            burst_tracker: HashMap::new(),
             epoch_start: chrono::Utc::now().timestamp() as u64,
             epoch_duration: EPOCH_DURATION_SECS,
         }
@@ -170,9 +181,11 @@ impl RateLimiter {
         let now = chrono::Utc::now().timestamp() as u64;
         if now >= self.epoch_start + self.epoch_duration {
             self.usage.clear();
+            self.burst_tracker.clear();
             self.epoch_start = now;
         }
 
+        // SECURITY [F1]: Per-epoch rate limit
         let used = self.usage.entry(*address).or_insert(0);
         if *used >= budget.queries_per_epoch {
             return Err(StakingError::RateLimitExceeded {
@@ -180,6 +193,21 @@ impl RateLimiter {
                 used: *used,
                 limit: budget.queries_per_epoch,
             });
+        }
+
+        // SECURITY [F1]: Per-second burst limit
+        let burst = self.burst_tracker.entry(*address).or_insert((now, 0));
+        if burst.0 == now {
+            burst.1 += 1;
+            if burst.1 > BURST_LIMIT_PER_SEC {
+                return Err(StakingError::RateLimitExceeded {
+                    address: *address,
+                    used: burst.1,
+                    limit: BURST_LIMIT_PER_SEC,
+                });
+            }
+        } else {
+            *burst = (now, 1);
         }
 
         *used += 1;

@@ -349,7 +349,8 @@ pub struct TrainingState {
     /// Current average loss across all workers.
     pub avg_loss: f64,
     /// Loss history (sampled, for tracking convergence).
-    pub loss_history: Vec<(u64, f64)>, // (step, loss)
+    /// SECURITY [D3]: Uses VecDeque for O(1) front removal.
+    pub loss_history: std::collections::VecDeque<(u64, f64)>,
     /// Current learning rate.
     pub learning_rate: f64,
     /// Number of active workers.
@@ -372,7 +373,7 @@ impl TrainingState {
             total_training_tokens,
             progress: 0.0,
             avg_loss: f64::NAN,
-            loss_history: Vec::new(),
+            loss_history: std::collections::VecDeque::new(),
             learning_rate: 0.0,
             active_workers: 0,
             global_tokens_per_second: 0.0,
@@ -406,9 +407,10 @@ impl TrainingState {
         } else { f64::INFINITY };
 
         // Sample loss history (keep last 1000 points)
-        self.loss_history.push((self.global_step, self.avg_loss));
-        if self.loss_history.len() > 1000 {
-            self.loss_history.remove(0);
+        // SECURITY [D3]: VecDeque gives O(1) pop_front vs Vec::remove(0) which is O(n)
+        self.loss_history.push_back((self.global_step, self.avg_loss));
+        while self.loss_history.len() > 1000 {
+            self.loss_history.pop_front();
         }
     }
 
@@ -429,6 +431,16 @@ impl TrainingState {
         };
         self.latest_checkpoint = Some(checkpoint.clone());
         self.checkpoints.push(checkpoint);
+        // SECURITY [D4]: Cap checkpoints to prevent unbounded memory growth
+        const MAX_CHECKPOINTS: usize = 50;
+        if self.checkpoints.len() > MAX_CHECKPOINTS {
+            // Keep first (earliest) and last MAX_CHECKPOINTS-1 (most recent)
+            let keep_from = self.checkpoints.len() - (MAX_CHECKPOINTS - 1);
+            let first = self.checkpoints[0].clone();
+            self.checkpoints = std::iter::once(first)
+                .chain(self.checkpoints[keep_from..].iter().cloned())
+                .collect();
+        }
     }
 
     /// Training progress as a human-readable string.

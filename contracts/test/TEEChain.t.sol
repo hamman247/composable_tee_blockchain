@@ -288,10 +288,9 @@ contract DAOGovernanceTest is Test {
 
         // Alice does NOT get collateral back
         assertEq(token.balanceOf(alice), aliceBalBefore);
-        // 50% (500) to treasury
-        assertEq(token.balanceOf(address(treasury)) - treasuryBalBefore, 500 ether);
-        // 50% (500) burned
-        assertEq(token.balanceOf(address(0xdead)) - burnBalBefore, 500 ether);
+        // 25% (250) to treasury, 25% (250) burned, 50% (500) also to treasury (non-emergency)
+        assertEq(token.balanceOf(address(0xdead)) - burnBalBefore, 250 ether);
+        assertEq(token.balanceOf(address(treasury)) - treasuryBalBefore, 750 ether);
     }
 
     function test_DoubleVoteFails() public {
@@ -370,13 +369,13 @@ contract DAOGovernanceTest is Test {
         assertTrue(isEmergencyRevocation);
     }
 
-    function test_EmergencyFreeze_CollateralIs5000() public {
+    function test_EmergencyFreeze_CollateralIs50000() public {
         uint256 balBefore = token.balanceOf(alice);
 
         vm.prank(alice);
         dao.emergencyFreeze(teeId);
 
-        assertEq(balBefore - token.balanceOf(alice), 5000 ether);
+        assertEq(balBefore - token.balanceOf(alice), 50000 ether);
     }
 
     function test_EmergencyFreeze_RequiresMinimumStake() public {
@@ -406,7 +405,7 @@ contract DAOGovernanceTest is Test {
         assertFalse(registry.isMiningEligible(teeId));
         assertEq(uint256(registry.getStatus(teeId)), uint256(TEERegistry.TeeStatus.Frozen));
 
-        // Alice gets ALL 5000 TEEC collateral back
+        // Alice gets ALL 50000 TEEC collateral back
         assertEq(token.balanceOf(alice), aliceBalBefore);
     }
 
@@ -433,11 +432,12 @@ contract DAOGovernanceTest is Test {
         assertTrue(registry.isOperational(teeId));
         assertEq(uint256(registry.getStatus(teeId)), uint256(TEERegistry.TeeStatus.Active));
 
-        // Alice does NOT get collateral back
-        assertEq(token.balanceOf(alice), aliceBalBefore - 5000 ether);
-        // 50% (2500) burned, 50% (2500) to treasury
-        assertEq(token.balanceOf(address(0xdead)) - burnBalBefore, 2500 ether);
-        assertEq(token.balanceOf(address(treasury)) - treasuryBalBefore, 2500 ether);
+        // Alice does NOT get collateral back directly, but gets 50% (25000) as operator compensation
+        // Net loss: 50000 - 25000 = 25000 TEEC
+        assertEq(token.balanceOf(alice), aliceBalBefore - 25000 ether);
+        // 25% (12500) burned, 25% (12500) to treasury
+        assertEq(token.balanceOf(address(0xdead)) - burnBalBefore, 12500 ether);
+        assertEq(token.balanceOf(address(treasury)) - treasuryBalBefore, 12500 ether);
     }
 
     function test_EmergencyFreeze_RevocationFailsNoQuorum_FrezeLifted() public {

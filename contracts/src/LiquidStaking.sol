@@ -63,6 +63,22 @@ contract LiquidStaking {
 
     WithdrawalRequest[] public withdrawalQueue;
     uint256 public pendingWithdrawals;
+    /// @dev SECURITY [D6]: Maximum withdrawal queue depth to prevent gas cost escalation.
+    uint256 public constant MAX_QUEUE_DEPTH = 10_000;
+    /// @dev SECURITY [D6]: Pointer to skip claimed entries during iteration.
+    uint256 public nextUnclaimedId;
+
+    // ═══════════════════════ Reentrancy Guard ═══════════════════════
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+    uint256 private _status;
+
+    modifier nonReentrant() {
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+        _status = _ENTERED;
+        _;
+        _status = _NOT_ENTERED;
+    }
 
     // ═══════════════════════ Events ═══════════════════════
     event Deposited(address indexed user, uint256 ethAmount, uint256 teeEthMinted);
@@ -78,6 +94,7 @@ contract LiquidStaking {
         require(_teeOperator != address(0), "Zero operator");
         treasury = _treasury;
         teeOperator = _teeOperator;
+        _status = _NOT_ENTERED;
     }
 
     modifier onlyTeeOperator() {
@@ -90,7 +107,7 @@ contract LiquidStaking {
     /// @notice Deposit ETH and receive teeETH tokens.
     /// @dev Exchange rate: teeETH = ETH * totalSupply / totalPooledEther
     ///      First deposit: 1:1 rate.
-    function deposit() external payable {
+    function deposit() external payable nonReentrant {
         require(msg.value > 0, "Zero deposit");
 
         uint256 shares;
@@ -114,9 +131,11 @@ contract LiquidStaking {
 
     /// @notice Request withdrawal: burn teeETH, get ETH from buffer or enter queue.
     /// @param teeEthAmount Amount of teeETH to burn.
-    function requestWithdrawal(uint256 teeEthAmount) external {
+    function requestWithdrawal(uint256 teeEthAmount) external nonReentrant {
         require(teeEthAmount > 0, "Zero amount");
         require(balanceOf[msg.sender] >= teeEthAmount, "Insufficient teeETH");
+        /// @dev SECURITY [D6]: Prevent queue from growing beyond MAX_QUEUE_DEPTH
+        require(withdrawalQueue.length < MAX_QUEUE_DEPTH, "Withdrawal queue full");
 
         // Calculate ETH owed at current exchange rate
         uint256 ethOwed = (teeEthAmount * totalPooledEther) / totalSupply;
@@ -157,7 +176,7 @@ contract LiquidStaking {
     }
 
     /// @notice Claim a queued withdrawal (after validator exit funds arrive).
-    function claimWithdrawal(uint256 requestId) external {
+    function claimWithdrawal(uint256 requestId) external nonReentrant {
         require(requestId < withdrawalQueue.length, "Invalid ID");
         WithdrawalRequest storage req = withdrawalQueue[requestId];
         require(req.requester == msg.sender, "Not your request");
