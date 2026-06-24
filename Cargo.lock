@@ -3009,6 +3009,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "tee5-evm-bridge"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "bincode",
+ "chrono",
+ "hex",
+ "k256",
+ "rand 0.8.6",
+ "serde",
+ "serde_json",
+ "sha3",
+ "tee-consensus",
+ "tee-crypto",
+ "tee-types",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

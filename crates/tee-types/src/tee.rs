@@ -36,6 +36,8 @@ pub enum TeeRole {
     OllamaInference,
     /// Ethereum Mainnet Validator (TEE-4) — liquid staking via TEE.
     EthValidator,
+    /// EVM Cross-Chain Bridge (TEE-5) — trustless bridge between TEE-Chain and Ethereum.
+    EvmBridge,
     /// User-submitted TEE job.
     UserJob,
 }

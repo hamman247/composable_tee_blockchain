@@ -24,8 +24,10 @@ struct TestnetConfig {
     tee2_interval: Duration,  // training step interval
     tee3_interval: Duration,  // inference batch interval
     tee4_interval: Duration,  // validator epoch interval
+    tee5_interval: Duration,  // bridge processing interval
     tee3_mining_threshold: u64,
     tee4_uptime_threshold: Duration,
+    tee5_deposit_finality: Duration,
 }
 
 impl TestnetConfig {
@@ -45,8 +47,10 @@ impl TestnetConfig {
             tee2_interval: Duration::from_secs(5),
             tee3_interval: Duration::from_secs(4),
             tee4_interval: Duration::from_secs(6),
+            tee5_interval: Duration::from_secs(8),
             tee3_mining_threshold: 10,
             tee4_uptime_threshold: Duration::from_secs(15),
+            tee5_deposit_finality: Duration::from_secs(10),
         }
     }
 }
@@ -69,6 +73,17 @@ struct Tee4State {
     pool_eth: U256,
     pool_shares: U256,
     blocks_mined: u64,
+}
+
+struct Tee5State {
+    deposits: u64,
+    burns: u64,
+    approvals: u64,
+    pending_deposits: Vec<(u64, Instant)>, // (amount_idx, time_deposited)
+    pending_burns: Vec<(u64, Instant)>,    // (amount_idx, time_burned)
+    blocks_mined: u64,
+    total_bridged_in: u64,
+    total_bridged_out: u64,
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -162,7 +177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("╔═══════════════════════════════════════════════════════════╗");
     println!("║  TEE-Chain Local Testnet                                ║");
-    println!("║  Running all 4 TEEs for {} seconds ({} min)             ║",
+    println!("║  Running all 5 TEEs for {} seconds ({} min)             ║",
         cfg.duration_secs, cfg.duration_secs / 60);
     println!("╚═══════════════════════════════════════════════════════════╝\n");
 
@@ -172,13 +187,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (kp2, id2, ch2) = (PqcSigningKeypair::generate()?, make_id(b"tee2-ai-training"), make_hash(b"tee2-v1"));
     let (kp3, id3, ch3) = (PqcSigningKeypair::generate()?, make_id(b"tee3-ollama-inference"), make_hash(b"tee3-v1"));
     let (kp4, id4, ch4) = (PqcSigningKeypair::generate()?, make_id(b"tee4-eth-validator"), make_hash(b"tee4-v1"));
+    let (kp5, id5, ch5) = (PqcSigningKeypair::generate()?, make_id(b"tee5-evm-bridge"), make_hash(b"tee5-v1"));
     let c1 = certify(&root_kp, id1, ch1, &kp1)?;
     let c2 = certify(&root_kp, id2, ch2, &kp2)?;
     let c3 = certify(&root_kp, id3, ch3, &kp3)?;
     let c4 = certify(&root_kp, id4, ch4, &kp4)?;
+    let c5 = certify(&root_kp, id5, ch5, &kp5)?;
 
     let ops = [Address::from([0x01;20]), Address::from([0x02;20]),
-               Address::from([0x03;20]), Address::from([0x04;20])];
+               Address::from([0x03;20]), Address::from([0x04;20]), Address::from([0x05;20])];
 
     // ── Registry ──
     let mut reg = TeeRegistry::new();
@@ -196,12 +213,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (id2, ch2, &kp2, TeeRole::AiTraining),
         (id3, ch3, &kp3, TeeRole::OllamaInference),
         (id4, ch4, &kp4, TeeRole::EthValidator),
+        (id5, ch5, &kp5, TeeRole::EvmBridge),
     ].iter().enumerate() {
         let cert_data = match i {
             0 => bincode::serialize(&c1)?,
             1 => bincode::serialize(&c2)?,
             2 => bincode::serialize(&c3)?,
-            _ => bincode::serialize(&c4)?,
+            3 => bincode::serialize(&c4)?,
+            _ => bincode::serialize(&c5)?,
         };
         reg.register(TeeRegistration {
             tee_id: *id, code_hash: *ch,
@@ -227,7 +246,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bn = 0u64;
     let mut bh = B256::ZERO;
-    let mut round = [0u64; 4]; // per-TEE round counter
+    let mut round = [0u64; 5]; // per-TEE round counter
 
     // TEE-specific state
     let mut t3 = Tee3State { queries_served: 0, tokens_processed: 0, blocks_mined: 0 };
@@ -239,16 +258,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut tee2_step = 0u64;
     let mut tee2_loss = 10.0f64;
+    let mut t5 = Tee5State {
+        deposits: 0, burns: 0, approvals: 0,
+        pending_deposits: Vec::new(), pending_burns: Vec::new(),
+        blocks_mined: 0, total_bridged_in: 0, total_bridged_out: 0,
+    };
 
-    println!("  Intervals: TEE-1={}s  TEE-2={}s  TEE-3={}s  TEE-4={}s",
+    println!("  Intervals: TEE-1={}s  TEE-2={}s  TEE-3={}s  TEE-4={}s  TEE-5={}s",
         cfg.tee1_interval.as_secs(), cfg.tee2_interval.as_secs(),
-        cfg.tee3_interval.as_secs(), cfg.tee4_interval.as_secs());
+        cfg.tee3_interval.as_secs(), cfg.tee4_interval.as_secs(), cfg.tee5_interval.as_secs());
     println!("  TEE-3 mining: every {} queries", cfg.tee3_mining_threshold);
-    println!("  TEE-4 mining: after {}s uptime\n", cfg.tee4_uptime_threshold.as_secs());
+    println!("  TEE-4 mining: after {}s uptime", cfg.tee4_uptime_threshold.as_secs());
+    println!("  TEE-5 deposit finality: {}s\n", cfg.tee5_deposit_finality.as_secs());
 
     let start = Instant::now();
     let deadline = Duration::from_secs(cfg.duration_secs);
-    let mut last = [Instant::now(); 4];
+    let mut last = [Instant::now(); 5];
     let mut tee4_can_mine = false;
     let mut total_valid = 0u64;
     let mut total_invalid = 0u64;
@@ -379,6 +404,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     elapsed.as_secs(), cfg.tee4_uptime_threshold.as_secs());
             }
         }
+
+        // ── TEE-5: EVM Bridge ──
+        if now.duration_since(last[4]) >= cfg.tee5_interval {
+            last[4] = now;
+
+            // Simulate incoming deposits (every other cycle)
+            if t5.deposits % 2 == 0 {
+                t5.deposits += 1;
+                t5.pending_deposits.push((t5.deposits, Instant::now()));
+            }
+            // Simulate burns (every third cycle)
+            if t5.burns % 3 == 0 {
+                t5.burns += 1;
+                t5.pending_burns.push((t5.burns, Instant::now()));
+            }
+
+            // Check for ready deposits (past finality)
+            let ready_count = t5.pending_deposits.iter()
+                .filter(|(_, t)| now.duration_since(*t) >= cfg.tee5_deposit_finality)
+                .count();
+            let ready_burns = t5.pending_burns.iter()
+                .filter(|(_, t)| now.duration_since(*t) >= Duration::from_secs(5))
+                .count();
+
+            if ready_count > 0 || ready_burns > 0 {
+                round[4] += 1;
+                let bridged_in = ready_count as u64;
+                let approved = ready_burns as u64;
+                t5.total_bridged_in += bridged_in;
+                t5.total_bridged_out += approved;
+                t5.approvals += approved;
+
+                // Remove processed entries
+                t5.pending_deposits.retain(|(_, t)| now.duration_since(*t) < cfg.tee5_deposit_finality);
+                t5.pending_burns.retain(|(_, t)| now.duration_since(*t) < Duration::from_secs(5));
+
+                let reward = U256::from(1_000_000_000_000_000_000u128); // 1 TEEC
+                let result = produce_block(
+                    &kp5, &root_kp, id5, ch5, &c5, round[4], bh,
+                    vec![], vec![PaymentInstruction { recipient: ops[4], amount: reward, is_reward: true }],
+                    serde_json::to_vec(&serde_json::json!({
+                        "deposits_processed": bridged_in,
+                        "approvals_signed": approved,
+                        "total_bridged_in": t5.total_bridged_in,
+                        "total_bridged_out": t5.total_bridged_out,
+                    }))?,
+                    vec![], &mut engine,
+                )?;
+                if let Some(src) = result {
+                    bn += 1; bh = block_hash(bn, bh);
+                    for inc in &src.message.incentives { *balances.entry(inc.recipient).or_insert(U256::ZERO) += inc.amount; }
+                    t5.blocks_mined += 1;
+                    total_valid += 1;
+                    println!("  [{}] TEE-5 Block #{:<4} deposits={} approvals={} ⛏",
+                        elapsed_fmt(elapsed), bn, bridged_in, approved);
+                } else { total_invalid += 1; }
+            } else {
+                println!("  [{}] TEE-5 bridge  pending: {} deposits, {} burns",
+                    elapsed_fmt(elapsed), t5.pending_deposits.len(), t5.pending_burns.len());
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -397,6 +483,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  TEE-2 blocks:     {} (training, loss={:.4})", round[1], tee2_loss);
     println!("  TEE-3 blocks:     {} (inference, {} queries, {} tokens)", t3.blocks_mined, t3.queries_served, t3.tokens_processed);
     println!("  TEE-4 blocks:     {} (validator, {} atts, {} validators)", t4.blocks_mined, t4.attestations, t4.validators);
+    println!("  TEE-5 blocks:     {} (bridge, {} in, {} out)", t5.blocks_mined, t5.total_bridged_in, t5.total_bridged_out);
     println!();
     println!("  Balances:");
     let mut sorted: Vec<_> = balances.iter().collect();
